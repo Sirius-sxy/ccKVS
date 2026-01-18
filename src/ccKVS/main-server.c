@@ -110,8 +110,10 @@ int main(int argc, char *argv[])
 
 	clt_needed_ah_ready = 0;
 	wrkr_needed_ah_ready = 0;
-	// NOTE: Server does not need cache - cache is on client side
-	// cache_init(WORKERS_PER_MACHINE, CLIENTS_PER_MACHINE);
+
+	// SERVER-SIDE CACHE: Initialize cache for workers
+	// Each server has symmetric cache with hottest keys
+	cache_init(WORKERS_PER_MACHINE, CLIENTS_PER_MACHINE);
 
 #if ENABLE_WORKERS_CRCW == 1
 	mica_init(&kv, 0, 0, HERD_NUM_BKTS, HERD_LOG_CAP);

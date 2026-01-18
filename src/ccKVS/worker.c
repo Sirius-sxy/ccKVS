@@ -1,5 +1,6 @@
 #include "util.h"
 #include "inline_util.h"
+#include "worker-cache.h"
 
 
 void *run_worker(void *arg)
@@ -203,7 +204,27 @@ void *run_worker(void *arg)
 			w_stats[wrkr_lid].empty_polls_per_worker++;
 			continue; // no request was found, start over
 		}
-		KVS_BATCH_OP(&kv, wr_i, op_ptr_arr, mica_resp_arr);
+
+		/* ---------------------------------------------------------------------------
+		------------------------------ SERVER-SIDE CACHE LOOKUP---------------------
+		---------------------------------------------------------------------------*/
+		// Arrays for cache misses
+		struct mica_op *cache_miss_ops[WORKER_MAX_BATCH];
+		uint16_t cache_miss_indices[WORKER_MAX_BATCH];
+		struct mica_resp kvs_resp[WORKER_MAX_BATCH];
+
+		// Query cache first - separates hits from misses
+		uint16_t cache_miss_count = worker_query_cache(wr_i, op_ptr_arr, mica_resp_arr,
+		                                               cache_miss_ops, cache_miss_indices);
+
+		// Only query KVS for cache misses
+		if (cache_miss_count > 0) {
+			KVS_BATCH_OP(&kv, cache_miss_count, cache_miss_ops, kvs_resp);
+			// Merge KVS responses back into main response array
+			worker_merge_responses(wr_i, mica_resp_arr, kvs_resp,
+			                      cache_miss_indices, cache_miss_count);
+		}
+		// If cache_miss_count == 0, all requests were cache hits!
 
 
 		/* ---------------------------------------------------------------------------
