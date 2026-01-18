@@ -64,31 +64,38 @@ Client                    Server A                     Server B
   │<─────Response────────────┤                            │
 ```
 
-## Implementation Plan
+## Implementation Status
 
-### Phase 1: Server-Side Cache Integration
-- [x] Remove cache from client (main-client.c)
-- [ ] Add cache to worker (main-server.c, worker.c)
-- [ ] Implement cache lookup before KVS access
-- [ ] Handle cache hits in worker
+### Phase 1: Server-Side Cache Integration ✅ COMPLETED
+- [x] Add cache to worker (main-server.c, worker.c)
+- [x] Implement cache lookup before KVS access (worker-cache.c)
+- [x] Handle cache hits in worker
+- [x] Separate cache hits from misses
 
-### Phase 2: Key Ownership Detection
-- [ ] Implement hash-based key partitioning
-- [ ] Add function: `is_local_key(key, worker_id)`
-- [ ] Determine key owner: `get_key_owner(key)`
+### Phase 2: Key Ownership Detection ✅ COMPLETED
+- [x] Implement hash-based key partitioning (key-partition.h)
+- [x] Add function: `is_local_key(key, machine_id)`
+- [x] Determine key owner: `get_key_owner_machine(key)`
+- [x] Separate local and remote keys after cache miss
 
-### Phase 3: Server-to-Server Forwarding
+### Phase 3: Remove Client Cache ✅ COMPLETED
+- [x] Remove cache initialization from client (main-client.c)
+- [x] Disable KVS initialization on client
+- [x] Client becomes pure request generator
+
+### Phase 4: Client Round-Robin ✅ COMPLETED
+- [x] Implement round-robin server selection (round-robin.h)
+- [x] Replace hash-based routing with RR (cache.c)
+- [x] Per-thread RR counters for load balancing
+
+### Phase 5: Server-to-Server Forwarding ⚠️ NOT IMPLEMENTED
 - [ ] Create worker-to-worker QPs
 - [ ] Implement request forwarding
 - [ ] Handle forwarded requests
 - [ ] Return results to original client
+- **Current behavior**: Remote keys fail with MICA_RESP_GET_FAIL
 
-### Phase 4: Client Round-Robin
-- [ ] Remove cache logic from client
-- [ ] Implement round-robin server selection
-- [ ] Simplify client to basic request generator
-
-### Phase 5: Cache Consistency (if writes exist)
+### Phase 6: Cache Consistency (future work)
 - [ ] Handle write invalidations across server caches
 - [ ] Implement cache coherence protocol
 
@@ -183,3 +190,118 @@ Client                    Server A                     Server B
 3. Client response handling:
    - Should client know which server responded?
    - Or transparent forwarding?
+
+## Current Implementation Guide
+
+### Building
+
+```bash
+cd src/ccKVS
+make separated  # Build both server and client
+# Or individually:
+make server     # ccKVS-server-sc, ccKVS-server-lin
+make client     # ccKVS-client-sc, ccKVS-client-lin
+```
+
+### Running
+
+**Server nodes:**
+```bash
+./run-server.sh
+```
+This will:
+- Initialize server-side cache with hot keys
+- Start worker threads
+- Wait for client requests
+
+**Client nodes:**
+```bash
+./run-client.sh
+```
+This will:
+- Generate requests from trace
+- Distribute requests round-robin to servers
+- No local cache initialization
+
+### Expected Behavior
+
+1. **Cache Hits** (hot keys):
+   - Server checks cache first
+   - Fast response directly from cache
+   - No KVS access needed
+
+2. **Local Shard Hits** (cache miss, local key):
+   - Server checks cache → miss
+   - Server checks local KVS → hit
+   - Response from local KVS
+
+3. **Remote Keys** (cache miss, non-local key):
+   - Server checks cache → miss
+   - Server detects key belongs to another machine
+   - **Currently fails with MICA_RESP_GET_FAIL**
+   - TODO: Should forward to correct server
+
+### Known Limitations
+
+⚠️ **Server-to-server forwarding not implemented**
+- Requests for keys not in cache AND not in local shard will FAIL
+- Need to ensure workload matches key distribution
+- Or implement forwarding (Phase 5)
+
+⚠️ **Write consistency not handled**
+- Cache may become stale on writes
+- Need to implement invalidation/update protocol
+
+⚠️ **Performance considerations**
+- Round-robin may cause load imbalance if key distribution is skewed
+- Cache should contain most frequently accessed keys
+- Local shard only handles ~1/N of total keyspace (N = number of machines)
+
+### Recommended Workload
+
+For best results without forwarding:
+1. Ensure cache contains all hot keys (currently 250K keys)
+2. Use workload where >90% requests hit cache
+3. Or partition workload so each client only accesses keys from one server
+
+### Testing
+
+```bash
+# Single server test (all keys local)
+MACHINE_NUM=1 make server client
+
+# Multi-server with cache only
+# Workload must have high cache hit rate
+MACHINE_NUM=3 ./run-server.sh  # on 3 machines
+MACHINE_NUM=3 ./run-client.sh  # on client machines
+```
+
+## Performance Expectations
+
+### Theoretical Performance
+
+**Cache Hit (best case):**
+- Latency: ~1-2 μs (memory access)
+- Throughput: Very high (limited by CPU)
+
+**Local KVS (cache miss, local key):**
+- Latency: ~5-10 μs (KVS lookup + memory)
+- Throughput: Moderate (KVS bottleneck)
+
+**Remote Key (NOT IMPLEMENTED):**
+- Would be: ~20-50 μs (RDMA + KVS)
+- Currently: FAIL
+
+### Actual vs Original Architecture
+
+**Original (client-side cache):**
+- Cache hit: Local memory access (~1 μs)
+- Cache miss: RDMA to worker (~10-20 μs)
+
+**New (server-side cache):**
+- Cache hit: RDMA + server cache (~10-12 μs)
+- Cache miss (local): RDMA + server KVS (~15-25 μs)
+- Cache miss (remote): NOT WORKING
+
+**Trade-off**: Slightly higher latency even on cache hits due to network,
+but better load distribution and aligns with paper's server-side caching design.
