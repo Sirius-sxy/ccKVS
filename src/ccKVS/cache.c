@@ -9,6 +9,7 @@
 #include <optik_mod.h>
 #include "optik_mod.h"
 #include "cache.h"
+#include "round-robin.h"
 
 struct cache cache;
 
@@ -1145,6 +1146,9 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 	uint64_t seed = 0xdeadbeef;
 	uint32_t empty_reqs = 0;
 
+	// Round-robin counter per thread
+	static __thread uint64_t rr_counter = 0;
+
 	if (ENABLE_ASSERTIONS == 1) {
 		for (j = 0; j < next_op_i; j++){
 			if (resp[j].type == EMPTY) {
@@ -1200,11 +1204,12 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 										 (uint8_t)(hrd_fastrand(&seed) % SESSIONS_PER_CLIENT)
 										 * CLIENTS_PER_MACHINE + thread_id : thread_id); // only for multiple sessions
 
-		if (MEASURE_LATENCY == 1) start_measurement(start, latency_info, trace[trace_iter].home_machine_id,
-													ops, i, thread_id, trace[trace_iter].opcode, isSC, next_op_i);
+		// ROUND-ROBIN: Use round-robin scheduling instead of trace-based routing
+		kh[i].machine = get_next_server_rr(&rr_counter);
+		kh[i].worker = get_next_worker_rr(&rr_counter);
 
-		kh[i].machine = (uint8_t) trace[trace_iter].home_machine_id;
-		kh[i].worker = (uint8_t) trace[trace_iter].home_worker_id;
+		if (MEASURE_LATENCY == 1) start_measurement(start, latency_info, kh[i].machine,
+													ops, i, thread_id, trace[trace_iter].opcode, isSC, next_op_i);
 		resp[i].type = EMPTY;
 		if(ops[i].opcode == CACHE_OP_PUT) //put the folowing value
 			str_to_binary(ops[i].value, "Armonia is the key to success!  ", HERD_VALUE_SIZE);

@@ -1,5 +1,6 @@
 #include "util.h"
 #include "cache.h"
+#include "key-partition.h"
 
 /*
  * Server-side cache lookup for worker threads
@@ -9,6 +10,7 @@
  */
 
 extern struct cache cache;  // Global cache shared by all workers
+extern uint8_t machine_id;  // Current machine ID
 
 /*
  * Query server-side cache for a batch of requests
@@ -131,4 +133,51 @@ void worker_merge_responses(uint16_t wr_i,
 		uint16_t idx = cache_miss_indices[i];
 		resp_arr[idx] = kvs_resp[i];
 	}
+}
+
+/*
+ * Separate local and remote keys from cache misses
+ *
+ * After cache miss, check if keys belong to local shard or need forwarding.
+ *
+ * @param cache_miss_count: Number of cache misses
+ * @param cache_miss_ops: Cache miss operations
+ * @param cache_miss_indices: Original indices of cache misses
+ * @param local_ops: Output array for local shard operations
+ * @param local_indices: Output indices for local operations
+ * @param remote_ops: Output array for remote operations (need forwarding)
+ * @param remote_indices: Output indices for remote operations
+ * @param remote_machines: Output array of target machine IDs for remote ops
+ * @return: Number of local operations
+ */
+uint16_t worker_separate_local_remote(uint16_t cache_miss_count,
+                                      struct mica_op **cache_miss_ops,
+                                      uint16_t *cache_miss_indices,
+                                      struct mica_op **local_ops,
+                                      uint16_t *local_indices,
+                                      struct mica_op **remote_ops,
+                                      uint16_t *remote_indices,
+                                      uint8_t *remote_machines)
+{
+	uint16_t local_count = 0;
+	uint16_t remote_count = 0;
+
+	for(uint16_t i = 0; i < cache_miss_count; i++) {
+		struct mica_op *op = cache_miss_ops[i];
+
+		if(is_local_key(&op->key, machine_id)) {
+			// Key belongs to local shard
+			local_ops[local_count] = op;
+			local_indices[local_count] = cache_miss_indices[i];
+			local_count++;
+		} else {
+			// Key belongs to remote machine - need forwarding
+			remote_ops[remote_count] = op;
+			remote_indices[remote_count] = cache_miss_indices[i];
+			remote_machines[remote_count] = get_key_owner_machine(&op->key);
+			remote_count++;
+		}
+	}
+
+	return local_count;
 }
