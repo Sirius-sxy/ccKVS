@@ -168,9 +168,39 @@ make: gcc-6: No such file or directory
 - `include/optik/optik_mod.h` - 修复 atomic_ops.h 路径
 - `include/optik/utils.h` - 添加 _GNU_SOURCE 定义
 
-**状态**: ✅ 已修复（新提交）
+**状态**: ✅ 已修复（Commit 1d7378f）
 
 **注**: CPU_ZERO/CPU_SET警告在某些系统上可能依然存在，但这是无害的警告，不影响功能
+
+---
+
+### 5. Type Conflict for remote_wrkr_qp（remote_wrkr_qp类型冲突）
+
+**错误信息：**
+```
+worker-coherence.c:9:27: error: conflicting types for 'remote_wrkr_qp'; have 'struct remote_qp **'
+../../include/ccKVS/main.h:343:25: note: previous declaration of 'remote_wrkr_qp' with type 'struct remote_qp[1][30]'
+```
+
+**问题原因：**
+- `worker-coherence.c` 中错误地将 `remote_wrkr_qp` 声明为双指针 `struct remote_qp **`
+- 实际类型应该是二维数组 `struct remote_qp[WORKER_NUM_UD_QPS][WORKER_NUM]`
+- 与 `main.h` 和 `worker-forward.c` 中的声明不一致
+
+**修复方案：**
+- 修改 `worker-coherence.c` 中的声明以匹配 `main.h`：
+  ```c
+  // Before:
+  extern struct remote_qp **remote_wrkr_qp;
+
+  // After:
+  extern struct remote_qp remote_wrkr_qp[WORKER_NUM_UD_QPS][WORKER_NUM];
+  ```
+
+**修改的文件：**
+- `src/ccKVS/worker-coherence.c` - 修正 remote_wrkr_qp 类型声明
+
+**状态**: ✅ 已修复（新提交）
 
 ---
 

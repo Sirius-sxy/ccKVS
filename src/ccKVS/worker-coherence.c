@@ -6,7 +6,7 @@
 
 // External references
 // Note: machine_id is declared in hrd.h (included via worker-coherence.h)
-extern struct remote_qp **remote_wrkr_qp;
+extern struct remote_qp remote_wrkr_qp[WORKER_NUM_UD_QPS][WORKER_NUM];
 
 /**
  * Initialize worker coherence context
