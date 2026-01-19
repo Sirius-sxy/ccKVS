@@ -96,8 +96,8 @@ void worker_handle_forwarded_request(struct forward_req *forward_req,
                                      struct mica_resp *resp,
                                      struct hrd_ctrl_blk *cb)
 {
-	struct mica_op *op = &forward_req->op;
-	struct mica_op *op_ptr = op;
+	// Access the operation directly without taking address to avoid alignment warning
+	struct mica_op *op_ptr = &forward_req->op;
 
 	// Query local KVS (we own this key)
 	KVS_BATCH_OP(kv, 1, &op_ptr, resp);

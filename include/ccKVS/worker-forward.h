@@ -3,6 +3,7 @@
 
 #include "mica.h"
 #include "hrd.h"
+#include "main.h"  // For struct remote_qp
 #include <stdint.h>
 
 /*
@@ -17,6 +18,7 @@
 /*
  * Forwarding request structure
  * Contains original request + client address for direct response
+ * Note: Not packed to avoid alignment issues - natural alignment is acceptable
  */
 struct forward_req {
 	struct mica_op op;           // Original request
@@ -25,7 +27,7 @@ struct forward_req {
 	uint8_t original_server;     // Server that received the request
 	uint8_t target_server;       // Server that should handle it
 	uint64_t request_id;         // For tracking
-} __attribute__((packed));
+};
 
 /*
  * Forward a batch of requests to remote servers
