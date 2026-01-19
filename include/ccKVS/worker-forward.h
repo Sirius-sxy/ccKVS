@@ -1,10 +1,11 @@
 #ifndef WORKER_FORWARD_H
 #define WORKER_FORWARD_H
 
+#include <stdint.h>
 #include "mica.h"
 #include "hrd.h"
+#include "optik_mod.h"  // Must be included before main.h (provides optik_lock_t)
 #include "main.h"  // For struct remote_qp
-#include <stdint.h>
 
 /*
  * Server-to-server request forwarding
