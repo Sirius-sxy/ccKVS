@@ -4,7 +4,7 @@
 #include <string.h>
 
 extern struct remote_qp remote_wrkr_qp[WORKER_NUM_UD_QPS][WORKER_NUM];
-extern uint8_t machine_id;
+// Note: machine_id is declared in hrd.h (included via util.h)
 
 /*
  * Forward requests to remote servers using existing worker-to-worker QPs

@@ -10,7 +10,7 @@
  */
 
 extern struct cache cache;  // Global cache shared by all workers
-extern uint8_t machine_id;  // Current machine ID
+// Note: machine_id is declared in hrd.h (included via util.h)
 
 /*
  * Query server-side cache for a batch of requests

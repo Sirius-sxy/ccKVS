@@ -5,7 +5,7 @@
 #include <assert.h>
 
 // External references
-extern uint8_t machine_id;
+// Note: machine_id is declared in hrd.h (included via worker-coherence.h)
 extern struct remote_qp **remote_wrkr_qp;
 
 /**
