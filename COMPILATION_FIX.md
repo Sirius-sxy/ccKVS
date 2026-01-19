@@ -40,7 +40,34 @@
 
 ---
 
-### 2. 编译器版本问题
+### 2. Type Conflict for machine_id（类型冲突错误）
+
+**错误信息：**
+```
+worker-cache.c:13:16: error: conflicting types for 'machine_id'; have 'uint8_t'
+../../include/libhrd/hrd.h:161:12: note: previous declaration of 'machine_id' with type 'int'
+```
+
+**问题原因：**
+- `hrd.h` 中 `machine_id` 被声明为 `int`
+- `worker-cache.c`, `worker-coherence.c`, `worker-forward.c` 中错误地重新声明为 `uint8_t`
+- 类型冲突导致编译失败
+
+**修复方案：**
+- 删除worker模块中的重复 `extern` 声明
+- 所有模块统一使用 `hrd.h` 中的 `int` 类型声明
+- 添加注释说明 `machine_id` 已在 `hrd.h` 中声明
+
+**修改的文件：**
+- `src/ccKVS/worker-cache.c`
+- `src/ccKVS/worker-coherence.c`
+- `src/ccKVS/worker-forward.c`
+
+**状态**: ✅ 已修复并提交（Commit 3a0feed）
+
+---
+
+### 3. 编译器版本问题
 
 **错误信息：**
 ```
@@ -162,6 +189,18 @@ ls -lh ccKVS-*
 
 ## 🔧 可能的编译错误及解决方案
 
+### 错误：`conflicting types for 'machine_id'`
+
+**错误信息：**
+```
+error: conflicting types for 'machine_id'; have 'uint8_t'
+note: previous declaration of 'machine_id' with type 'int'
+```
+
+**解决**: ✅ 已在 Commit 3a0feed 中修复
+- 问题是 worker 模块中重复声明了 `machine_id` 为错误类型
+- 如果你从旧版本升级，请拉取最新代码
+
 ### 错误：`fatal error: numaif.h: No such file or directory`
 
 **解决**: 安装 `libnuma-dev`
@@ -245,6 +284,7 @@ chmod +x quick-compile.sh
 |--------|----------|------|
 | 907e4ca | 修复多重定义错误 | `hrd.h`, `hrd_conn.c` |
 | 907e4ca | 更新编译器版本 | All `Makefile`s |
+| 3a0feed | 修复machine_id类型冲突 | `worker-cache.c`, `worker-coherence.c`, `worker-forward.c` |
 
 ---
 
