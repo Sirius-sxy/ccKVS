@@ -2,6 +2,12 @@
 #include "inline_util.h"
 #include "worker-cache.h"
 #include "worker-forward.h"
+#include "worker-coherence.h"
+
+// Enable cache coherence for server-side caching (Phase 6)
+#ifndef ENABLE_CACHE_COHERENCE
+#define ENABLE_CACHE_COHERENCE 1
+#endif
 
 
 void *run_worker(void *arg)
@@ -138,6 +144,25 @@ void *run_worker(void *arg)
 	struct ibv_mr* resp_mr;
 	setup_worker_WRs(&response_buffer, resp_mr, cb[0], recv_sgl, recv_wr, wr, sgl, wrkr_lid);
 
+	/* ---------------------------------------------------------------------------
+	------------Initialize Cache Coherence Context (Phase 6)---------------------
+	---------------------------------------------------------------------------*/
+	struct worker_coherence_ctx coh_ctx;
+#if ENABLE_CACHE_COHERENCE == 1
+	uint16_t wrkr_gid = machine_id * WORKERS_PER_MACHINE + wrkr_lid;
+	if (worker_coherence_init(&coh_ctx, cb[0], wrkr_gid) != 0) {
+		fprintf(stderr, "Worker %d: Failed to initialize coherence context\n", wrkr_lid);
+		// Continue without coherence (graceful degradation)
+	} else {
+		printf("Worker %d: Cache coherence enabled\n", wrkr_lid);
+	}
+#endif
+
+	// Buffers for coherence updates
+	struct cache_op coh_update_ops[WORKER_BCAST_TO_CACHE_BATCH];
+	struct mica_resp coh_update_resp[WORKER_BCAST_TO_CACHE_BATCH];
+	struct ibv_wc coh_wc[WORKER_BCAST_TO_CACHE_BATCH];
+
 	qp_i = 0;
 	uint16_t send_qp_i = 0, per_recv_qp_wr_i[WORKER_NUM_UD_QPS] = {0};
 	uint32_t dbg_counter = 0;
@@ -148,6 +173,28 @@ void *run_worker(void *arg)
 	while (1) {
 		/* Do a pass over requests from all clients */
 		wr_i = 0;
+
+		/* ---------------------------------------------------------------------------
+		------------------------------ POLL COHERENCE UPDATES (Phase 6)--------------
+		---------------------------------------------------------------------------*/
+#if ENABLE_CACHE_COHERENCE == 1
+		// Poll for coherence updates from other servers
+		uint16_t coh_update_num = worker_poll_coherence(&coh_ctx, coh_update_ops,
+		                                                coh_update_resp, wrkr_gid);
+
+		// Apply received updates to local cache
+		if (coh_update_num > 0) {
+			worker_apply_coherence_updates(coh_update_ops, coh_update_resp,
+			                              coh_update_num, wrkr_lid);
+
+			// Send credit messages back to senders
+			int num_comps = ibv_poll_cq(cb[0]->dgram_recv_cq[WORKER_BROADCAST_QP_ID],
+			                            coh_update_num, coh_wc);
+			if (num_comps > 0) {
+				worker_create_credits(&coh_ctx, coh_wc, num_comps, cb[0], wrkr_gid);
+			}
+		}
+#endif
 
 		/* ---------------------------------------------------------------------------
 		------------------------------ LOCAL REQUESTS--------------------------------
@@ -273,6 +320,39 @@ void *run_worker(void *arg)
 			}
 		}
 
+		/* ---------------------------------------------------------------------------
+		------------------------------ CACHE COHERENCE BROADCAST (Phase 6)----------
+		---------------------------------------------------------------------------*/
+#if ENABLE_CACHE_COHERENCE == 1
+		// Prepare cache operations for writes that need to be broadcasted
+		// Scan successful local writes and mark them for broadcast
+		struct cache_op broadcast_ops[WORKER_MAX_BATCH];
+		uint16_t broadcast_count = 0;
+
+		for (uint16_t i = 0; i < wr_i; i++) {
+			// Check if this is a successful PUT operation
+			if (op_ptr_arr[i]->opcode == MICA_OP_PUT &&
+			    (mica_resp_arr[i].type == MICA_RESP_PUT_SUCCESS ||
+			     mica_resp_arr[i].type == CACHE_PUT_SUCCESS)) {
+
+				// Convert to cache_op and mark for broadcast
+				memcpy(&broadcast_ops[broadcast_count].key, &op_ptr_arr[i]->key,
+				       sizeof(struct mica_key));
+				broadcast_ops[broadcast_count].opcode = CACHE_OP_BRC;  // Mark for broadcast
+				broadcast_ops[broadcast_count].val_len = op_ptr_arr[i]->val_len;
+				memcpy(broadcast_ops[broadcast_count].value, op_ptr_arr[i]->value,
+				       op_ptr_arr[i]->val_len);
+
+				broadcast_count++;
+			}
+		}
+
+		// Broadcast updates to all other servers
+		if (broadcast_count > 0) {
+			worker_broadcast_updates(&coh_ctx, broadcast_ops, broadcast_count,
+			                        cb[0], wrkr_gid);
+		}
+#endif
 
 		/* ---------------------------------------------------------------------------
 		------------------------------ POLL COMPLETIONS------------------------
