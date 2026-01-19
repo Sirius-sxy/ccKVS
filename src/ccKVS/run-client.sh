@@ -3,8 +3,9 @@
 
 ### Start of initialization ###
 is_RoCE=0
-protocol="sc" # choose "sc" (Sequential Consistency) or "lin" (Linearizability)
-executable="ccKVS-client-${protocol}"
+# Note: Client is protocol-agnostic (no cache, no coherence)
+# Protocol (SC/LIN) is only relevant on server side
+executable="ccKVS-client"
 export MEMCACHED_IP="129.215.165.8" # Node having memcached to initialize RDMA QPs connections/handlers
 export MLX5_SINGLE_THREADED=1
 export MLX5_SCATTER_TO_CQE=1
@@ -63,8 +64,9 @@ blue "Removing hugepages"
 shm-rm.sh 1>/dev/null 2>/dev/null
 
 blue "Cleanup any existing client processes"
-sudo killall ccKVS-client-sc
-sudo killall ccKVS-client-lin
+sudo killall ccKVS-client 2>/dev/null
+sudo killall ccKVS-client-sc 2>/dev/null   # Legacy
+sudo killall ccKVS-client-lin 2>/dev/null  # Legacy
 
 yellow "Running client threads"
 yellow "Make sure the server is already running on the target machines!"

@@ -156,6 +156,10 @@ int main(int argc, char *argv[])
 
 	// CLIENT-ONLY MODE: No cache on client side
 	// Cache is on server side (workers)
+	// In the separated architecture, client is protocol-agnostic:
+	// - No cache initialization needed
+	// - No coherence protocol (SC/LIN) on client
+	// - Client just does round-robin request distribution
 	// cache_init(WORKERS_PER_MACHINE, CLIENTS_PER_MACHINE);  // DISABLED
 
 #if ENABLE_WORKERS_CRCW == 1

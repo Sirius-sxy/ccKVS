@@ -2,7 +2,7 @@ LD      := gcc
 LDFLAGS := -O3 -std=gnu11 -flto -lgsl -lgslcblas -libverbs -lrt -lpthread -lmemcached -lnuma -lrdmacm
 CC  = gcc
 CFLAGS   = -O3 -std=gnu11  -I../../include/mica -I../../include/libhrd -I../../include/ccKVS -I../../include/optik
-APPS    := ccKVS-sc ccKVS-lin ccKVS-server-sc ccKVS-server-lin ccKVS-client-sc ccKVS-client-lin clean-o
+APPS    := ccKVS-sc ccKVS-lin ccKVS-server-sc ccKVS-server-lin ccKVS-client clean-o
 PROF    := -g -fno-omit-frame-pointer
 
 all: ${APPS}
@@ -21,17 +21,15 @@ ccKVS-server-sc: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mic
 ccKVS-server-lin: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mica/city.o main-server.o worker.o worker-cache.o worker-forward.o worker-coherence.o cache.o util.o stats.o
 	${LD} -o $@ $^ ${LDFLAGS}
 
-# Separated client executables
-ccKVS-client-sc: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mica/city.o main-client.o client-sc.o cache.o util.o stats.o
-	${LD} -o $@ $^ ${LDFLAGS}
-
-ccKVS-client-lin: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mica/city.o main-client.o client-lin.o cache.o util.o stats.o
+# Separated client executable (protocol-agnostic, no cache)
+# Note: Client doesn't need SC/LIN distinction since cache is server-side
+ccKVS-client: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mica/city.o main-client.o client-sc.o cache.o util.o stats.o
 	${LD} -o $@ $^ ${LDFLAGS}
 
 # Convenience targets
 server: ccKVS-server-sc ccKVS-server-lin
 
-client: ccKVS-client-sc ccKVS-client-lin
+client: ccKVS-client
 
 separated: server client
 
