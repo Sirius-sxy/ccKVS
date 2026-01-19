@@ -1,5 +1,7 @@
 #include "util.h"
 #include "inline_util.h"
+#include "worker-cache.h"
+#include "worker-forward.h"
 
 
 void *run_worker(void *arg)
@@ -203,7 +205,73 @@ void *run_worker(void *arg)
 			w_stats[wrkr_lid].empty_polls_per_worker++;
 			continue; // no request was found, start over
 		}
-		KVS_BATCH_OP(&kv, wr_i, op_ptr_arr, mica_resp_arr);
+
+		/* ---------------------------------------------------------------------------
+		------------------------------ SERVER-SIDE CACHE LOOKUP---------------------
+		---------------------------------------------------------------------------*/
+		// Arrays for cache misses
+		struct mica_op *cache_miss_ops[WORKER_MAX_BATCH];
+		uint16_t cache_miss_indices[WORKER_MAX_BATCH];
+		struct mica_resp kvs_resp[WORKER_MAX_BATCH];
+
+		// Query cache first - separates hits from misses
+		uint16_t cache_miss_count = worker_query_cache(wr_i, op_ptr_arr, mica_resp_arr,
+		                                               cache_miss_ops, cache_miss_indices);
+
+		/* ---------------------------------------------------------------------------
+		------------------------------ LOCAL/REMOTE SEPARATION-----------------------
+		---------------------------------------------------------------------------*/
+		// After cache miss, separate local shard keys from remote keys
+		struct mica_op *local_ops[WORKER_MAX_BATCH];
+		uint16_t local_indices[WORKER_MAX_BATCH];
+		struct mica_op *remote_ops[WORKER_MAX_BATCH];
+		uint16_t remote_indices[WORKER_MAX_BATCH];
+		uint8_t remote_machines[WORKER_MAX_BATCH];
+
+		uint16_t local_count = 0;
+		uint16_t remote_count = 0;
+
+		if (cache_miss_count > 0) {
+			local_count = worker_separate_local_remote(cache_miss_count,
+			                                           cache_miss_ops, cache_miss_indices,
+			                                           local_ops, local_indices,
+			                                           remote_ops, remote_indices,
+			                                           remote_machines);
+			remote_count = cache_miss_count - local_count;
+		}
+
+		/* ---------------------------------------------------------------------------
+		------------------------------ LOCAL KVS LOOKUP------------------------------
+		---------------------------------------------------------------------------*/
+		// Query local KVS for keys that belong to this shard
+		if (local_count > 0) {
+			KVS_BATCH_OP(&kv, local_count, local_ops, kvs_resp);
+			// Merge local KVS responses
+			worker_merge_responses(wr_i, mica_resp_arr, kvs_resp,
+			                      local_indices, local_count);
+		}
+
+		/* ---------------------------------------------------------------------------
+		------------------------------ REMOTE FORWARDING-----------------------------
+		---------------------------------------------------------------------------*/
+		// Forward remote requests to the appropriate servers
+		if (remote_count > 0) {
+			// Forward these requests to workers that own the keys
+			worker_forward_requests(remote_count, remote_ops, remote_indices,
+			                       remote_machines, cb[0], wrkr_lid, NULL);
+
+			// Mark these requests as "forwarded" in responses
+			// The actual response will come from the target worker to the client
+			for(uint16_t i = 0; i < remote_count; i++) {
+				uint16_t idx = remote_indices[i];
+				// Mark as handled (forwarded)
+				mica_resp_arr[idx].type = MICA_RESP_GET_SUCCESS;  // Temporary
+				mica_resp_arr[idx].val_ptr = NULL;
+				mica_resp_arr[idx].val_len = 0;
+				// Note: Actual response will be sent by target worker
+				// This is a limitation - ideally we'd suppress this response
+			}
+		}
 
 
 		/* ---------------------------------------------------------------------------

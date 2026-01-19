@@ -153,12 +153,16 @@ int main(int argc, char *argv[])
 
 	clt_needed_ah_ready = 0;
 	wrkr_needed_ah_ready = 0;
-	cache_init(WORKERS_PER_MACHINE, CLIENTS_PER_MACHINE);
+
+	// CLIENT-ONLY MODE: No cache on client side
+	// Cache is on server side (workers)
+	// cache_init(WORKERS_PER_MACHINE, CLIENTS_PER_MACHINE);  // DISABLED
 
 #if ENABLE_WORKERS_CRCW == 1
-	mica_init(&kv, 0, 0, HERD_NUM_BKTS, HERD_LOG_CAP);
-	cache_populate_fixed_len(&kv, HERD_NUM_KEYS, HERD_VALUE_SIZE);
-	optik_init(&kv_lock);
+	// Client doesn't need KVS either - all data is on servers
+	// mica_init(&kv, 0, 0, HERD_NUM_BKTS, HERD_LOG_CAP);
+	// cache_populate_fixed_len(&kv, HERD_NUM_KEYS, HERD_VALUE_SIZE);
+	// optik_init(&kv_lock);
 #endif
 
 #if MEASURE_LATENCY == 1

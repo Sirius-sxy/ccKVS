@@ -14,11 +14,11 @@ ccKVS-sc: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mica/city.
 ccKVS-lin: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mica/city.o main.o client-lin.o worker.o cache.o util.o stats.o
 	${LD}  -o $@ $^ ${LDFLAGS}
 
-# Separated server executables
-ccKVS-server-sc: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mica/city.o main-server.o worker.o cache.o util.o stats.o
+# Separated server executables (with server-side cache)
+ccKVS-server-sc: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mica/city.o main-server.o worker.o worker-cache.o worker-forward.o cache.o util.o stats.o
 	${LD} -o $@ $^ ${LDFLAGS}
 
-ccKVS-server-lin: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mica/city.o main-server.o worker.o cache.o util.o stats.o
+ccKVS-server-lin: ../libhrd/hrd_conn.o ../libhrd/hrd_util.o ../mica/mica.o ../mica/city.o main-server.o worker.o worker-cache.o worker-forward.o cache.o util.o stats.o
 	${LD} -o $@ $^ ${LDFLAGS}
 
 # Separated client executables
