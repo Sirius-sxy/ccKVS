@@ -89,6 +89,91 @@ make: gcc-6: No such file or directory
 
 ---
 
+### 4. Header Inclusion Order Issues（头文件包含顺序问题）
+
+**错误信息（错误1）：**
+```
+../../include/optik/utils.h:711:22: error: 'CORES_PER_SOCKET' undeclared
+../../include/optik/utils.h:742:23: error: 'the_cores' undeclared
+```
+
+**问题原因：**
+- `optik/utils.h` 需要 `DEFAULT` 和 `CORE_NUM` 宏定义
+- 这些宏在 `cache.h` 中定义
+- `worker-forward.h` 直接包含 `optik_mod.h` 而没有先包含 `cache.h`
+- 导致 `utils.h` 在没有这些定义的情况下被编译
+
+**修复方案：**
+- 在 `worker-forward.h` 中用 `cache.h` 替换单独的头文件包含
+- `cache.h` 会按正确顺序包含所有需要的头文件
+  ```c
+  // Before:
+  #include "mica.h"
+  #include "hrd.h"
+  #include "optik_mod.h"
+  #include "main.h"
+
+  // After:
+  #include "cache.h"  // Defines DEFAULT and CORE_NUM, includes all needed headers
+  ```
+
+**错误信息（错误2）：**
+```
+../../include/optik/optik_mod.h:44:10: fatal error: atomic_ops.h: No such file or directory
+```
+
+**问题原因：**
+- `optik_mod.h` 使用 `<atomic_ops.h>`（系统头文件）
+- 实际文件名是 `atomic_ops_if.h`（本地头文件）
+- 应该使用 `"atomic_ops_if.h"` 而不是 `<atomic_ops.h>`
+
+**修复方案：**
+- 修改 `include/optik/optik_mod.h`：
+  ```c
+  // Before:
+  #include <atomic_ops.h>
+
+  // After:
+  #include "atomic_ops_if.h"
+  ```
+
+**错误信息（错误3 - 警告）：**
+```
+../../include/optik/utils.h:744:9: warning: implicit declaration of function 'CPU_ZERO'
+../../include/optik/utils.h:745:9: warning: implicit declaration of function 'CPU_SET'
+../../include/optik/utils.h:750:13: warning: implicit declaration of function 'pthread_setaffinity_np'
+```
+
+**问题原因：**
+- `CPU_ZERO`, `CPU_SET`, `pthread_setaffinity_np` 需要 `_GNU_SOURCE` 宏
+- `utils.h` 在包含系统头文件（如 `<sched.h>`）之前没有定义 `_GNU_SOURCE`
+- 虽然 `optik_mod.h` 定义了它，但 `utils.h` 自己的包含发生得更早
+
+**修复方案：**
+- 在 `include/optik/utils.h` 顶部添加 `_GNU_SOURCE` 定义：
+  ```c
+  #ifndef _UTILS_H_INCLUDED_
+  #define _UTILS_H_INCLUDED_
+
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #endif
+
+  #include <stdlib.h>
+  // ... other includes
+  ```
+
+**修改的文件：**
+- `include/ccKVS/worker-forward.h` - 修改头文件包含顺序
+- `include/optik/optik_mod.h` - 修复 atomic_ops.h 路径
+- `include/optik/utils.h` - 添加 _GNU_SOURCE 定义
+
+**状态**: ✅ 已修复（新提交）
+
+**注**: CPU_ZERO/CPU_SET警告在某些系统上可能依然存在，但这是无害的警告，不影响功能
+
+---
+
 ## ⚠️ 需要手动处理的依赖
 
 ### 必需的系统依赖

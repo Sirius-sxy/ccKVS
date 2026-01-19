@@ -41,7 +41,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <stdint.h>
-#include <atomic_ops.h>
+#include "atomic_ops_if.h"
 
 #include "utils.h"
 
