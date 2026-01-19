@@ -1,6 +1,6 @@
-LD      := gcc-6
+LD      := gcc
 LDFLAGS := -O3 -std=gnu11 -flto -lrt -lpthread -lnuma -libverbs -lmemcached  -lrdmacm#-lpapi
-CC = gcc-6
+CC = gcc
 CFLAGS =  -O3 -std=gnu11 -I ../libhrd/ -I../../include/mica -I../../include/libhrd
 APPS    := test
 

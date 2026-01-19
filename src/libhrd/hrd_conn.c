@@ -1,5 +1,11 @@
 #include "hrd.h"
 
+// Global variable definitions (declared as extern in hrd.h)
+int is_roce, is_master, is_client;
+int machine_id, machines_num;
+char *remote_IP, *local_IP;
+int remote_id;
+
 /*
  * If @prealloc_conn_buf != NULL, @conn_buf_size is the size of the preallocated
  * buffer. If @prealloc_conn_buf == NULL, @conn_buf_size is the size of the

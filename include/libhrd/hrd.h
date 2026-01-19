@@ -156,10 +156,11 @@
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero)." ); } while (0)
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
 
-int is_roce, is_master, is_client;
-int machine_id, machines_num;
-char *remote_IP, *local_IP;
-int remote_id;
+// Global variable declarations (defined in hrd_conn.c)
+extern int is_roce, is_master, is_client;
+extern int machine_id, machines_num;
+extern char *remote_IP, *local_IP;
+extern int remote_id;
 
 // returns the number of remote IP addresses and fills the remoteIPs array with them
 int getRemoteIPs(char***);
