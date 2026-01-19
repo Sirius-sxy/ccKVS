@@ -95,9 +95,13 @@ Client                    Server A                     Server B
 - [x] Return results to original client
 - **Implementation**: Uses existing RDMA QPs between workers for forwarding
 
-### Phase 6: Cache Consistency (future work)
-- [ ] Handle write invalidations across server caches
-- [ ] Implement cache coherence protocol
+### Phase 6: Cache Coherence ✅ COMPLETED
+- [x] Adapt client-side coherence protocol to server-side architecture
+- [x] Implement broadcast update mechanism (worker-coherence.c)
+- [x] Add credit-based flow control for broadcasts
+- [x] Integrate coherence polling and broadcasting into worker main loop
+- [x] Apply received updates to local server caches
+- **Implementation**: Based on original ccKVS Sequential Consistency protocol with broadcast updates
 
 ## Key Design Decisions
 
@@ -161,6 +165,12 @@ Client                    Server A                     Server B
 4. `include/ccKVS/round-robin.h`
    - Round-robin load balancing for clients
    - Distribute requests evenly across servers
+
+5. `include/ccKVS/worker-coherence.h` + `src/ccKVS/worker-coherence.c`
+   - Server-to-server cache coherence protocol
+   - Broadcast invalidation/update mechanism
+   - Credit-based flow control for coherence messages
+   - Based on original ccKVS client-side coherence adapted to servers
 
 ## Configuration Changes
 
@@ -252,19 +262,19 @@ This will:
 3. **Remote Keys** (cache miss, non-local key):
    - Server checks cache → miss
    - Server detects key belongs to another machine
-   - **Currently fails with MICA_RESP_GET_FAIL**
-   - TODO: Should forward to correct server
+   - **Forwards to correct server** (Phase 5)
+   - Target server processes and responds to client
 
 ### Known Limitations
 
-⚠️ **Server-to-server forwarding not implemented**
-- Requests for keys not in cache AND not in local shard will FAIL
-- Need to ensure workload matches key distribution
-- Or implement forwarding (Phase 5)
+✅ **Server-to-server forwarding implemented** (Phase 5)
+- Remote keys are now forwarded to owning servers
+- Uses existing RDMA worker-to-worker connections
 
-⚠️ **Write consistency not handled**
-- Cache may become stale on writes
-- Need to implement invalidation/update protocol
+✅ **Cache coherence implemented** (Phase 6)
+- Writes broadcast updates to all server caches
+- Credit-based flow control prevents network congestion
+- Based on Sequential Consistency protocol from original ccKVS
 
 ⚠️ **Performance considerations**
 - Round-robin may cause load imbalance if key distribution is skewed
@@ -302,9 +312,9 @@ MACHINE_NUM=3 ./run-client.sh  # on client machines
 - Latency: ~5-10 μs (KVS lookup + memory)
 - Throughput: Moderate (KVS bottleneck)
 
-**Remote Key (NOT IMPLEMENTED):**
-- Would be: ~20-50 μs (RDMA + KVS)
-- Currently: FAIL
+**Remote Key (Phase 5 - Forwarding):**
+- Latency: ~30-60 μs (2x RDMA + remote KVS)
+- Overhead: One extra hop through forwarding server
 
 ### Actual vs Original Architecture
 
@@ -312,10 +322,15 @@ MACHINE_NUM=3 ./run-client.sh  # on client machines
 - Cache hit: Local memory access (~1 μs)
 - Cache miss: RDMA to worker (~10-20 μs)
 
-**New (server-side cache):**
+**New (server-side cache with coherence):**
 - Cache hit: RDMA + server cache (~10-12 μs)
 - Cache miss (local): RDMA + server KVS (~15-25 μs)
-- Cache miss (remote): NOT WORKING
+- Cache miss (remote): RDMA + forward + remote KVS (~30-60 μs)
+- Write operation: Local write + broadcast updates to all servers
 
-**Trade-off**: Slightly higher latency even on cache hits due to network,
-but better load distribution and aligns with paper's server-side caching design.
+**Trade-offs**:
+- Slightly higher latency on cache hits due to network hop
+- Better load distribution with round-robin
+- Cache coherence overhead on writes (broadcast to N-1 servers)
+- Aligns with paper's server-side caching design
+- Symmetric cache ensures consistent view across all servers
