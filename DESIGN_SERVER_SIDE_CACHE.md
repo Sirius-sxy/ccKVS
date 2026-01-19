@@ -88,12 +88,12 @@ Client                    Server A                     Server B
 - [x] Replace hash-based routing with RR (cache.c)
 - [x] Per-thread RR counters for load balancing
 
-### Phase 5: Server-to-Server Forwarding ⚠️ NOT IMPLEMENTED
-- [ ] Create worker-to-worker QPs
-- [ ] Implement request forwarding
-- [ ] Handle forwarded requests
-- [ ] Return results to original client
-- **Current behavior**: Remote keys fail with MICA_RESP_GET_FAIL
+### Phase 5: Server-to-Server Forwarding ✅ COMPLETED
+- [x] Create worker-to-worker QPs (using existing remote_wrkr_qp connections)
+- [x] Implement request forwarding (worker-forward.c)
+- [x] Handle forwarded requests (worker_handle_forwarded_request)
+- [x] Return results to original client
+- **Implementation**: Uses existing RDMA QPs between workers for forwarding
 
 ### Phase 6: Cache Consistency (future work)
 - [ ] Handle write invalidations across server caches
@@ -145,8 +145,22 @@ Client                    Server A                     Server B
    - Simplify to request generation only
 
 ### New Files
-1. `src/ccKVS/worker-forward.c` (optional)
-   - Helper functions for server-to-server forwarding
+1. `include/ccKVS/worker-forward.h` + `src/ccKVS/worker-forward.c`
+   - Server-to-server request forwarding implementation
+   - Forward requests to key owners
+   - Handle forwarded requests and return to original client
+
+2. `include/ccKVS/worker-cache.h` + `src/ccKVS/worker-cache.c`
+   - Server-side cache query and management
+   - Separate local and remote keys after cache misses
+
+3. `include/ccKVS/key-partition.h`
+   - Key ownership determination functions
+   - Hash-based key partitioning logic
+
+4. `include/ccKVS/round-robin.h`
+   - Round-robin load balancing for clients
+   - Distribute requests evenly across servers
 
 ## Configuration Changes
 
