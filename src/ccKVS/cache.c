@@ -10,6 +10,7 @@
 #include "optik_mod.h"
 #include "cache.h"
 #include "round-robin.h"
+#include "key-partition.h"
 
 struct cache cache;
 
@@ -27,7 +28,7 @@ void cache_reset_total_ops_issued(void);
  * Initialize the cache using a MICA instances and adding the timestamps
  * and locks to the keys of mica structure
  */
-void cache_init(int cache_id, int num_threads) {
+void cache_init(int cache_id, int num_threads, uint8_t machine_id) {
 	int i;
 	assert(sizeof(cache_meta) == 8); //make sure that the cache meta are 8B and thus can fit in mica unused key
 
@@ -39,7 +40,8 @@ void cache_init(int cache_id, int num_threads) {
 	for(i = 0; i < num_threads; i++)
 		cache_meta_reset(&cache.meta[i]);
 	mica_init(&cache.hash_table, cache_id, CACHE_SOCKET, CACHE_NUM_BKTS, HERD_LOG_CAP);
-	cache_populate_fixed_len(&cache.hash_table, CACHE_NUM_KEYS, HERD_VALUE_SIZE);
+	/* Use partitioned populate for cache - each server caches only its own slots */
+	cache_populate_fixed_len_partitioned(&cache.hash_table, CACHE_NUM_KEYS, HERD_VALUE_SIZE, machine_id);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1135,6 +1137,54 @@ void cache_populate_fixed_len(struct mica_kv* kv, int n, int val_len) {
 	// 			   "Index eviction fraction = %.4f.\n",
 	// 	   cache.hash_table.instance_id, n, val_len,
 	// 	   (double) cache.hash_table.num_index_evictions / cache.hash_table.num_insert_op);
+}
+
+void cache_populate_fixed_len_partitioned(struct mica_kv* kv, int n, int val_len, uint8_t machine_id) {
+	assert(n > 0);
+	assert(val_len > 0 && val_len <= MICA_MAX_VALUE);
+	assert(machine_id < MACHINE_NUM);
+
+	/* This is needed for the eviction message below to make sense */
+	assert(kv->num_insert_op == 0 && kv->num_index_evictions == 0);
+
+	int i;
+	struct cache_op op;
+	struct mica_resp resp;
+	unsigned long long *op_key = (unsigned long long *) &op.key;
+	int keys_inserted = 0;
+
+	/* Generate the keys to insert */
+	uint128 *key_arr = mica_gen_keys(n);
+
+	for(i = n - 1; i >= 0; i--) {
+		op_key[0] = key_arr[i].first;
+		op_key[1] = key_arr[i].second;
+
+		/* Check if this key belongs to this machine */
+		uint8_t key_owner = get_key_owner_machine((struct mica_key *)op_key);
+		if (key_owner != machine_id) {
+			continue;  /* Skip keys that don't belong to this machine */
+		}
+
+		optik_init(&op.key.meta);
+		op.key.meta.pending_acks = 0;
+		op.key.meta.state = VALID_STATE;
+		op.opcode = CACHE_OP_PUT;
+
+		op.val_len = (uint8_t) (val_len >> SHIFT_BITS);
+		uint8_t val = 'a';
+		memset(op.value, val, (uint8_t) val_len);
+
+		mica_insert_one(kv, (struct mica_op *) &op, &resp);
+		keys_inserted++;
+	}
+
+	free(key_arr);
+
+	printf("Cache: Machine %d populated with %d/%d keys (%.2f%%), length = %d. "
+		"Index eviction fraction = %.4f.\n",
+		machine_id, keys_inserted, n, (100.0 * keys_inserted / n), val_len,
+		(double) kv->num_index_evictions / (kv->num_insert_op > 0 ? kv->num_insert_op : 1));
 }
 
 //refill empty slots of array from the trace

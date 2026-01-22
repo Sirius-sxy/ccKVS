@@ -255,8 +255,9 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 							  struct mica_resp *resp, struct key_home* kh, int isSC, uint16_t next_op_i ,
 							  struct latency_flags*, struct timespec*, uint16_t*);
 
-void cache_init(int cache_id, int num_threads);
+void cache_init(int cache_id, int num_threads, uint8_t machine_id);
 void cache_populate_fixed_len(struct mica_kv* kv, int n, int val_len);
+void cache_populate_fixed_len_partitioned(struct mica_kv* kv, int n, int val_len, uint8_t machine_id);
 void cache_insert_one(struct cache_op *op, struct mica_resp *resp);
 
 void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **ops, struct mica_resp *resp);

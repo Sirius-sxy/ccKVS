@@ -5,6 +5,7 @@
 
 #include "hrd.h"
 #include "mica.h"
+#include "key-partition.h"
 
 int is_power_of_2(int x)
 {
@@ -386,4 +387,59 @@ void mica_populate_fixed_len(struct mica_kv *kv, int n, int val_len)
 	// 	"Index eviction fraction = %.4f.\n",
 	// 	kv->instance_id, n, val_len,
 	// 	(double) kv->num_index_evictions / kv->num_insert_op);
+}
+
+/*
+ * Populate the KVS with only the keys that belong to this machine's slots.
+ * Uses slot-based partitioning (16384 slots total, SLOTS_PER_MACHINE per machine).
+ *
+ * @param kv: The MICA KV store
+ * @param n: Total number of keys in the global key space
+ * @param val_len: Length of each value
+ * @param machine_id: This machine's ID (0 to MACHINE_NUM-1)
+ */
+void mica_populate_fixed_len_partitioned(struct mica_kv *kv, int n, int val_len, uint8_t machine_id)
+{
+	assert(kv != NULL);
+	assert(n > 0);
+	assert(val_len > 0 && val_len <= MICA_MAX_VALUE);
+	assert(machine_id < MACHINE_NUM);
+
+	/* This is needed for the eviction message below to make sense */
+	assert(kv->num_insert_op == 0 && kv->num_index_evictions == 0);
+
+	int i;
+	struct mica_op op;
+	unsigned long long *op_key = (unsigned long long *) &op.key;
+	struct mica_resp resp;
+	int keys_inserted = 0;
+
+	/* Generate the keys to insert */
+	uint128 *key_arr = mica_gen_keys(n);
+
+	for(i = 0; i < n; i++) {
+		op_key[0] = key_arr[i].first;
+		op_key[1] = key_arr[i].second;
+
+		/* Check if this key belongs to this machine */
+		uint8_t key_owner = get_key_owner_machine(&op.key);
+		if (key_owner != machine_id) {
+			continue;  /* Skip keys that don't belong to this machine */
+		}
+
+		op.opcode = MICA_OP_PUT;
+		op.val_len = val_len >> SHIFT_BITS;
+		uint8_t val = (uint8_t) (op_key[1] & 0xff);
+		memset(op.value, val, val_len);
+
+		mica_insert_one(kv, &op, &resp);
+		keys_inserted++;
+	}
+
+	free(key_arr);
+
+	printf("mica: Machine %d populated with %d/%d keys (%.2f%%), length = %d. "
+		"Index eviction fraction = %.4f.\n",
+		machine_id, keys_inserted, n, (100.0 * keys_inserted / n), val_len,
+		(double) kv->num_index_evictions / (kv->num_insert_op > 0 ? kv->num_insert_op : 1));
 }

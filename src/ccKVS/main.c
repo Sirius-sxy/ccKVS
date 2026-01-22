@@ -153,11 +153,12 @@ int main(int argc, char *argv[])
 
 	clt_needed_ah_ready = 0;
 	wrkr_needed_ah_ready = 0;
-	cache_init(WORKERS_PER_MACHINE, CLIENTS_PER_MACHINE); // the first ids are taken by the workers
+	cache_init(WORKERS_PER_MACHINE, CLIENTS_PER_MACHINE, (uint8_t)machine_id); // the first ids are taken by the workers
 
 #if ENABLE_WORKERS_CRCW == 1
 	mica_init(&kv, 0, 0, HERD_NUM_BKTS, HERD_LOG_CAP); // second 0 refers to numa node
-	cache_populate_fixed_len(&kv, HERD_NUM_KEYS, HERD_VALUE_SIZE);
+	/* Use partitioned populate - each server only loads its own slots */
+	mica_populate_fixed_len_partitioned(&kv, HERD_NUM_KEYS, HERD_VALUE_SIZE, (uint8_t)machine_id);
 	optik_init(&kv_lock);
 #endif
 

@@ -23,6 +23,10 @@
 #define CLIENTS_PER_MACHINE 10
 #define MACHINE_NUM 3
 
+/* ----------SHARDING/PARTITIONING------------------------ */
+#define TOTAL_SLOTS 16384  /* Total number of hash slots (like Redis Cluster) */
+#define SLOTS_PER_MACHINE (TOTAL_SLOTS / MACHINE_NUM)  /* Slots assigned to each machine */
+
 #define CACHE_SOCKET (WORKERS_PER_MACHINE < 8 ? 0 : 1 )// socket where the cache is bind
 
 #define CLIENT_NUM (CLIENTS_PER_MACHINE * MACHINE_NUM)

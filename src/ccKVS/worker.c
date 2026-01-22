@@ -29,7 +29,8 @@ void *run_worker(void *arg)
 #if ENABLE_WORKERS_CRCW == 0
 	struct mica_kv kv;
 	mica_init(&kv, (int)wrkr_lid, 0, HERD_NUM_BKTS, HERD_LOG_CAP); //0 refers to numa node
-	mica_populate_fixed_len(&kv, HERD_NUM_KEYS, HERD_VALUE_SIZE);
+	/* Use partitioned populate - each server only loads its own slots */
+	mica_populate_fixed_len_partitioned(&kv, HERD_NUM_KEYS, HERD_VALUE_SIZE, (uint8_t)machine_id);
 #endif
 
 	/* ---------------------------------------------------------------------------

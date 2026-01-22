@@ -145,6 +145,7 @@ void mica_batch_op(struct mica_kv *kv,
 /* Helpers */
 uint128* mica_gen_keys(int n);
 void mica_populate_fixed_len(struct mica_kv *kv, int n, int val_len);
+void mica_populate_fixed_len_partitioned(struct mica_kv *kv, int n, int val_len, uint8_t machine_id);
 
 /* Debug functions */
 void mica_print_bucket(struct mica_kv *kv, int bkt_idx);
