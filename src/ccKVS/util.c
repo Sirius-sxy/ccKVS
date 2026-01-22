@@ -47,7 +47,7 @@ void create_AHs(uint16_t clt_gid, struct hrd_ctrl_blk *cb)
                 ah_attr.dlid = 0;
                 ah_attr.grh.dgid.global.interface_id =  wrkr_qp[qp_i][i]->gid_global_interface_id;
                 ah_attr.grh.dgid.global.subnet_prefix = wrkr_qp[qp_i][i]->gid_global_subnet_prefix;
-                ah_attr.grh.sgid_index = 0;
+                ah_attr.grh.sgid_index = 3;
                 ah_attr.grh.hop_limit = 1;
             }
             // </vasilis>
@@ -96,7 +96,7 @@ void create_AHs(uint16_t clt_gid, struct hrd_ctrl_blk *cb)
                 ah_attr.dlid = 0;
                 ah_attr.grh.dgid.global.interface_id =  clt_qp[i][qp_i]->gid_global_interface_id;
                 ah_attr.grh.dgid.global.subnet_prefix = clt_qp[i][qp_i]->gid_global_subnet_prefix;
-                ah_attr.grh.sgid_index = 0;
+                ah_attr.grh.sgid_index = 3;
                 ah_attr.grh.hop_limit = 1;
             }
             // </vasilis>
@@ -150,7 +150,7 @@ void create_AHs_for_worker(uint16_t wrkr_lid, struct hrd_ctrl_blk *cb) {
             ah_attr.dlid = 0;
             ah_attr.grh.dgid.global.interface_id =  clt_qp[i][REMOTE_UD_QP_ID]->gid_global_interface_id;
             ah_attr.grh.dgid.global.subnet_prefix = clt_qp[i][REMOTE_UD_QP_ID]->gid_global_subnet_prefix;
-            ah_attr.grh.sgid_index = 0;
+            ah_attr.grh.sgid_index = 3;
             ah_attr.grh.hop_limit = 1;
         }
         clt_ah[i][REMOTE_UD_QP_ID] = ibv_create_ah(cb->pd, &ah_attr);
